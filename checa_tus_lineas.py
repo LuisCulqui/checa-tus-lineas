@@ -45,6 +45,7 @@ sql_insert_checa_tus_lineas = """
     VALUES (%s, %s, %s, %s, 1)
 """
 
+# ================= FUNCIONES DE INTERFAZ =================
 def mostrar_alerta_error(titulo, mensaje):
     """Muestra una ventana emergente de error nativa de Windows."""
     root = tk.Tk()
@@ -79,8 +80,11 @@ def obtener_datos_bd():
         dataFrame = pd.DataFrame(respuesta, columns=['RUC', 'NOMBRE'])
         print(f"📥 {len(dataFrame)} registros cargados para procesar.")
         return dataFrame
-    except Exception as e:
-        print(f"❌ Error al leer DB: {e}")
+    
+    except pymysql.MySQLError as e:
+        msg = f"No se pudo conectar a la Base de Datos.\nVerifique XAMPP/MySQL.\n\nError: {e}"
+        print(msg)
+        mostrar_alerta_error("Error de Base de Datos", msg)
         sys.exit(1)
 
 # ================= INSERTAMOS LOS DATOS EN LA BD =================
@@ -108,6 +112,7 @@ def obtener_cantidad_total(texto_info):
 
 def consultar_ruc_osiptel(driver, wait, ruc):
     try:
+        # LLENAR FORMULARIO
         select = Select(wait.until(EC.element_to_be_clickable((By.ID, "IdTipoDoc"))))
         select.select_by_value("2")
 
@@ -116,6 +121,9 @@ def consultar_ruc_osiptel(driver, wait, ruc):
         input.send_keys(ruc)
 
         driver.find_element(By.ID, "btnBuscar").click()
+        
+        # ESPERAR CARGA DE RESULTADOS
+        time.sleep(1)
 
         # REVISAR ERRORES ESPECIFICOS DEL INPUT
         try:
