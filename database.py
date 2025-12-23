@@ -35,7 +35,7 @@ def guardar_resultado(ruc, nombre, operadoras, cantidad):
     connection = obtener_conexion()
     try:
         with connection.cursor() as cursor:
-            cursor.execute(config.SQL_INSERT_RESULT, (str(ruc), nombre, operadoras, cantidad))
+            cursor.execute(config.SQL_INSERT_RESULT, (str(ruc), nombre, operadoras, cantidad, datetime.now()))
         connection.commit()
         return True
     except Exception as e:

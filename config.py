@@ -24,8 +24,8 @@ SQL_GET_RUCS = "SELECT ruc, nombre FROM empresa WHERE ruc IS NOT NULL"
 
 SQL_INSERT_RESULT = """
     INSERT INTO checa_tus_lineas 
-    (numero_documento, razon_social, empresa_operadora, cantidad_de_lineas, estado)
-    VALUES (%s, %s, %s, %s, 1)
+    (numero_documento, razon_social, empresa_operadora, cantidad_de_lineas, fecha_registro, estado)
+    VALUES (%s, %s, %s, %s, %s, 1)
 """
 
 SQL_INSERT_SALESFORCE = """
