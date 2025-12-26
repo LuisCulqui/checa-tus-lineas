@@ -31,6 +31,34 @@ def obtener_empresas():
     finally:
         connection.close()
 
+def obtener_rucs_procesados(tipo_proceso):
+
+    connection = obtener_conexion()
+    rucs_encontrados = set()
+    
+    try:
+        query = ""
+        if tipo_proceso == 'OSIPTEL':
+            query = config.SQL_GET_EXISTING_OSIPTEL
+        elif tipo_proceso == 'SALESFORCE':
+            query = config.SQL_GET_EXISTING_SF
+            
+        with connection.cursor() as cursor:
+            cursor.execute(query)
+            resultados = cursor.fetchall()
+            
+            # Convertimos la tupla de resultados en un set de strings limpios
+            for fila in resultados:
+                if fila[0]:
+                    rucs_encontrados.add(str(fila[0]).strip())
+                    
+        return rucs_encontrados
+    except Exception as e:
+        print(f"⚠️ Error obteniendo RUCs procesados ({tipo_proceso}): {e}")
+        return set() # Retorna conjunto vacío si falla, para que procese todo por seguridad
+    finally:
+        connection.close()
+
 def guardar_resultado(ruc, nombre, operadoras, cantidad):
     connection = obtener_conexion()
     try:

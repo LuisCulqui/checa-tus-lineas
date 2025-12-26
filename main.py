@@ -292,10 +292,11 @@ def main():
     df = database.obtener_empresas()
     
     if df.empty:
-        print("❌ No se encontraron empresas en la base de datos.")
+        print("❌ No se encontraron empresas RUC 20 en la base de datos.")
         return
     
-    print (f"ℹ️ Se encontraron {len(df)} empresas para procesar.")
+    total_empresas = len(df)
+    print (f"ℹ️ Se encontraron {total_empresas} empresas 'RUC 20' para procesar.")
 
     print("🌐 [CHROME] Iniciando...")
     try:
@@ -308,57 +309,79 @@ def main():
         wait = WebDriverWait(driver, 20)
         
         # PROCESO OPSITEL
+        print("\n🔵 [FASE 1] Iniciando Scraping Osiptel...")
+        rucs_ya_en_osiptel = database.obtener_rucs_procesados('OSIPTEL')
+        print(f"   ℹ️ RUCs ya registrados anteriormente en Osiptel: {len(rucs_ya_en_osiptel)}")
+        
         try:
             driver.get(config.URL_OSIPTEL)
-        except WebDriverException:
-            database.mostrar_error("Sin Internet", "Fallo acceso Osiptel.")
+            procesadas = 0
+
+            for index, row in df.iterrows():
+                ruc = str(row['RUC']).strip()
+                nombre = str(row['NOMBRE']).strip() if row['NOMBRE'] else ""
+
+                # VALIDACIÓN
+                if len(ruc) != 11 or not ruc.isdigit():
+                    print(f"   ❌ [SKIP] RUC inválido: {ruc}")
+                    continue
+
+                # VALIDACIÓN DE DUPLICADOS
+                if ruc in rucs_ya_en_osiptel:
+                    print(f"[{index+1}/{total_empresas}] RUC: {ruc} --> ⏩ Ya existe en BD. Saltando.")
+                    continue
+                
+                # SI NO EXISTE, PROCESAMOS
+                cantidad, detalle = consultar_ruc_osiptel(driver, wait, ruc)
+                guardado = database.guardar_resultado(ruc, nombre, detalle, cantidad)
+                
+                estado = "💾 Guardado" if guardado else "❌ Error BD"
+                print(f"[{index+1}/{total_empresas}] RUC: {ruc} --> {cantidad} líneas. ({estado})")
+                procesadas += 1
+
+            print(f"✅ Fase 1 terminada. Nuevos procesados: {procesadas}.")
+
+        except Exception as e:
+            print(f"❌ Error crítico en Fase Osiptel: {e}")
         
-        total_empresas = len(df)
-        procesadas = 0
+        # PROCESO SALESFORCE
+        print("\n🔵 [FASE 2] Iniciando Scraping Salesforce...")
+        rucs_ya_en_sf = database.obtener_rucs_procesados('SALESFORCE')
+        print(f"   ℹ️ RUCs ya registrados anteriormente en Salesforce: {len(rucs_ya_en_sf)}")
 
-        for index, row in df.iterrows():
-            ruc = str(row['RUC']).strip()
-            nombre = str(row['NOMBRE']).strip() if row['NOMBRE'] else ""
-            
-            if len(ruc) != 11 or not ruc.isdigit():
-                print(f"   ❌ [SKIP] RUC inválido: {ruc}")
-                continue
+        # VERIFICAMOS
+        rucs_pendientes = [str(r).strip() for r in df['RUC'] if str(r).strip() not in rucs_ya_en_sf]
 
-            cantidad, detalle = consultar_ruc_osiptel(driver, wait, ruc)
-            guardado = database.guardar_resultado(ruc, nombre, detalle, cantidad)
-            
-            estado = "💾 Guardado" if guardado else "❌ Error BD"
-            print(f"[{index+1}/{total_empresas}] RUC: {ruc} --> {cantidad} líneas. ({estado})")
+        if not rucs_pendientes:
+            print("✅ Todos los RUCs ya fueron procesados en Salesforce. No hay pendientes.")
+        else:
+            login_transforma(driver, wait)
 
-            procesadas += 1
+            for index, row in df.iterrows():
+                ruc = str(row['RUC']).strip()
+                nombre = str(row['NOMBRE']).strip() if row['NOMBRE'] else ""
+                
+                if len(ruc) != 11 or not ruc.isdigit():
+                    print(f"   ❌ [SKIP] RUC inválido: {ruc}")
+                    continue
+                
+                # VALIDACIÓN DE DUPLICADOS
+                if ruc in rucs_ya_en_sf:
+                    print(f"[{index+1}/{total_empresas}] Salesforce {ruc}... ⏩ Ya existe en BD. Saltando.")
+                    continue
 
-        print(f"\n✅ Terminado. Procesadas: {procesadas} (de {total_empresas}).")
-        print("🟢 Navegador queda abierto.")
-        
-        # PROCESO TRANSFORMA
-        login_transforma(driver, wait)
+                print(f"[{index+1}/{total_empresas}] Salesforce {ruc}...")
 
-        for index, row in df.iterrows():
-            ruc = str(row['RUC']).strip()
-            nombre = str(row['NOMBRE']).strip() if row['NOMBRE'] else ""
-            
-            if len(ruc) != 11 or not ruc.isdigit():
-                print(f"   ❌ [SKIP] RUC inválido: {ruc}")
-                continue
+                driver.get(config.URL_TRANSFORMA)
 
-            print(f"[{index+1}/{total_empresas}] Salesforce {ruc}...")
+                try:
+                    wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.forceSearchInputDesktop input")))
+                except: pass
 
-            driver.get(config.URL_TRANSFORMA)
+                data_sf = procesar_detalle_salesforce(driver, wait, ruc, nombre)
+                guardado_sf = database.guardar_salesforce(data_sf)
+                print(f"   💾 Guardado: {'SÍ' if guardado_sf else 'NO'}\n")
 
-            try:
-                wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, "div.forceSearchInputDesktop input")))
-            except: pass
-
-            data_sf = procesar_detalle_salesforce(driver, wait, ruc, nombre)
-            guardado_sf = database.guardar_salesforce(data_sf)
-            print(f"   💾 Guardado: {'SÍ' if guardado_sf else 'NO'}\n")
-
-        print("\n✅ FINALIZADO. NAVEGADOR ABIERTO.")
         
         print("\n" + "="*50)
         print("✅ PROCESO COMPLETADO.")
